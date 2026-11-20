@@ -1,0 +1,517 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // 1. CORE HELPERS, OWNER IDENTITY LOCK & VALIDATION PRIMITIVES
+    // =========================================================================
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Immutable Owner Identity Lock: Restricts administrative rights exclusively
+    // to Bilal Khokhar (MAHI): UID ADMIN-MAHI, verified Gmail, or verified Owner Phone
+    function isMahiOwner() {
+      return isSignedIn() && (
+        request.auth.uid == 'ADMIN-MAHI' ||
+        ('email' in request.auth.token &&
+         'email_verified' in request.auth.token &&
+         request.auth.token.email == 'khokharbilal665@gmail.com' &&
+         request.auth.token.email_verified == true) ||
+        ('phone_number' in request.auth.token &&
+         request.auth.token.phone_number == '+923429348582')
+      );
+    }
+
+    function isDriver() {
+      return isSignedIn() && exists(/databases/$(database)/documents/drivers/$(request.auth.uid));
+    }
+
+    function isApprovedDriver() {
+      return isDriver() &&
+        get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.isApproved == true;
+    }
+
+    // =========================================================================
+    // 2. STANDALONE ENTITY VALIDATION FUNCTIONS (ANTI-UPDATE-GAP)
+    // =========================================================================
+
+    function isValidAdminDoc(data) {
+      return data.uid is string && data.uid.size() >= 3 && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+             data.email == 'khokharbilal665@gmail.com' &&
+             data.role == 'ADMIN' &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidSecurityAuditLog(data) {
+      return data.id is string && data.id.size() >= 3 && data.id.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.eventType is string && data.eventType.size() >= 2 && data.eventType.size() <= 80 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             (!('severity' in data) || (data.severity is string && data.severity in ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'])) &&
+             (!('status' in data) || (data.status is string && data.status.size() <= 40)) &&
+             data.timestamp is timestamp && data.timestamp <= request.time;
+    }
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.role is string && data.role in ['PASSENGER', 'DRIVER', 'ADMIN'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 30)) &&
+             (!('emergencyContact' in data) || (data.emergencyContact is string && data.emergencyContact.size() <= 30)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('isVerified' in data) || data.isVerified is bool) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSavedPlace(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+             data.label is string && data.label.size() >= 1 && data.label.size() <= 80 &&
+             data.address is string && data.address.size() >= 1 && data.address.size() <= 200 &&
+             (!('urduLabel' in data) || (data.urduLabel is string && data.urduLabel.size() <= 80)) &&
+             (!('iconType' in data) || (data.iconType is string && data.iconType.size() <= 30)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidFcmToken(data, tokenPathId) {
+      return data.token is string && data.token == tokenPathId &&
+             data.token.size() >= 8 && data.token.size() <= 512 &&
+             data.platform is string && data.platform in ['android', 'ios', 'web'] &&
+             (!('role' in data) || (data.role is string && data.role in ['PASSENGER', 'DRIVER', 'ADMIN'])) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidDriver(data) {
+      return data.driverId is string && data.driverId.size() >= 3 && data.driverId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.phone is string && data.phone.size() >= 4 && data.phone.size() <= 30 &&
+             data.vehicleType is string && data.vehicleType in ['BIKE', 'RICKSHAW', 'CAR'] &&
+             data.isOnline is bool &&
+             data.isApproved is bool &&
+             (!('cnic' in data) || (data.cnic is string && data.cnic.size() <= 30)) &&
+             (!('licenseNumber' in data) || (data.licenseNumber is string && data.licenseNumber.size() <= 40)) &&
+             (!('vehicleModel' in data) || (data.vehicleModel is string && data.vehicleModel.size() <= 100)) &&
+             (!('plateNumber' in data) || (data.plateNumber is string && data.plateNumber.size() <= 30)) &&
+             (!('rating' in data) || (data.rating is number && data.rating >= 0 && data.rating <= 5)) &&
+             (!('totalRides' in data) || (data.totalRides is int && data.totalRides >= 0)) &&
+             (!('earningsPKR' in data) || (data.earningsPKR is number && data.earningsPKR >= 0)) &&
+             (!('currentLat' in data) || (data.currentLat is number && data.currentLat >= -90 && data.currentLat <= 90)) &&
+             (!('currentLng' in data) || (data.currentLng is number && data.currentLng >= -180 && data.currentLng <= 180)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidRide(data) {
+      return data.rideId is string && data.rideId.size() >= 3 && data.rideId.size() <= 128 &&
+             data.passengerId is string && data.passengerId.size() >= 3 && data.passengerId.size() <= 128 &&
+             data.pickup is string && data.pickup.size() >= 1 && data.pickup.size() <= 200 &&
+             data.destination is string && data.destination.size() >= 1 && data.destination.size() <= 200 &&
+             data.vehicleType is string && data.vehicleType in ['BIKE', 'RICKSHAW', 'CAR'] &&
+             data.status is string && data.status in ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
+             data.estimatedFarePKR is number && data.estimatedFarePKR >= 0 && data.estimatedFarePKR <= 100000 &&
+             (!('distanceKm' in data) || (data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 2000)) &&
+             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128)) &&
+             (!('driverLat' in data) || (data.driverLat is number && data.driverLat >= -90 && data.driverLat <= 90)) &&
+             (!('driverLng' in data) || (data.driverLng is number && data.driverLng >= -180 && data.driverLng <= 180)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod in ['CASH', 'JAZZCASH', 'EASYPAISA'])) &&
+             (!('paymentStatus' in data) || (data.paymentStatus is string && data.paymentStatus in ['PENDING', 'COLLECTED_CASH', 'PAID'])) &&
+             (!('serviceMode' in data) || (data.serviceMode is string && data.serviceMode in ['RIDE', 'PARCEL'])) &&
+             (!('isParcelDelivery' in data) || data.isParcelDelivery is bool) &&
+             (!('parcelDescription' in data) || (data.parcelDescription is string && data.parcelDescription.size() <= 200)) &&
+             (!('parcelWeightKg' in data) || (data.parcelWeightKg is string && data.parcelWeightKg.size() <= 40)) &&
+             (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() <= 100)) &&
+             (!('recipientPhone' in data) || (data.recipientPhone is string && data.recipientPhone.size() <= 30)) &&
+             (!('codAmountPKR' in data) || (data.codAmountPKR is number && data.codAmountPKR >= 0 && data.codAmountPKR <= 500000)) &&
+             (!('rating' in data) || (data.rating is int && data.rating >= 1 && data.rating <= 5)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidRideRequest(data) {
+      return data.passengerId is string && data.passengerId.size() >= 3 && data.passengerId.size() <= 128 &&
+             data.pickupLocation is string && data.pickupLocation.size() >= 1 && data.pickupLocation.size() <= 200 &&
+             data.destinationLocation is string && data.destinationLocation.size() >= 1 && data.destinationLocation.size() <= 200 &&
+             data.rideType is string && data.rideType in ['BIKE', 'RICKSHAW', 'CAR'] &&
+             data.status is string && data.status in ['SEARCHING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
+             data.estimatedFarePKR is number && data.estimatedFarePKR >= 0 && data.estimatedFarePKR <= 100000 &&
+             (!('distanceKm' in data) || (data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 2000)) &&
+             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128)) &&
+             (!('driverLat' in data) || (data.driverLat is number && data.driverLat >= -90 && data.driverLat <= 90)) &&
+             (!('driverLng' in data) || (data.driverLng is number && data.driverLng >= -180 && data.driverLng <= 180)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod in ['CASH', 'JAZZCASH', 'EASYPAISA'])) &&
+             (!('paymentStatus' in data) || (data.paymentStatus is string && data.paymentStatus in ['PENDING', 'COLLECTED_CASH', 'PAID'])) &&
+             (!('serviceMode' in data) || (data.serviceMode is string && data.serviceMode in ['RIDE', 'PARCEL'])) &&
+             (!('isParcelDelivery' in data) || data.isParcelDelivery is bool) &&
+             (!('parcelDescription' in data) || (data.parcelDescription is string && data.parcelDescription.size() <= 200)) &&
+             (!('parcelWeightKg' in data) || (data.parcelWeightKg is string && data.parcelWeightKg.size() <= 40)) &&
+             (!('recipientName' in data) || (data.recipientName is string && data.recipientName.size() <= 100)) &&
+             (!('recipientPhone' in data) || (data.recipientPhone is string && data.recipientPhone.size() <= 30)) &&
+             (!('codAmountPKR' in data) || (data.codAmountPKR is number && data.codAmountPKR >= 0 && data.codAmountPKR <= 500000)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidScheduledRide(data) {
+      return data.scheduleId is string && data.scheduleId.size() >= 3 && data.scheduleId.size() <= 128 &&
+             data.passengerId is string && data.passengerId.size() >= 3 && data.passengerId.size() <= 128 &&
+             data.pickupLocation is string && data.pickupLocation.size() >= 1 && data.pickupLocation.size() <= 200 &&
+             data.destinationLocation is string && data.destinationLocation.size() >= 1 && data.destinationLocation.size() <= 200 &&
+             data.rideType is string && data.rideType in ['BIKE', 'RICKSHAW', 'CAR'] &&
+             data.estimatedFarePKR is number && data.estimatedFarePKR >= 0 && data.estimatedFarePKR <= 100000 &&
+             (!('distanceKm' in data) || (data.distanceKm is number && data.distanceKm >= 0 && data.distanceKm <= 2000)) &&
+             data.scheduledForMillis is int && data.scheduledForMillis > 0 &&
+             data.status is string && data.status in ['SCHEDULED', 'DISPATCHED', 'COMPLETED', 'CANCELLED'] &&
+             (!('driverId' in data) || (data.driverId is string && data.driverId.size() <= 128)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod in ['CASH', 'JAZZCASH', 'EASYPAISA'])) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidWeddingBooking(data) {
+      return data.userId is string && data.userId.size() >= 3 && data.userId.size() <= 128 &&
+             data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 100 &&
+             data.customerPhone is string && data.customerPhone.size() >= 4 && data.customerPhone.size() <= 30 &&
+             data.eventDate is string && data.eventDate.size() >= 3 && data.eventDate.size() <= 40 &&
+             data.totalCostPKR is number && data.totalCostPKR > 0 && data.totalCostPKR <= 5000000 &&
+             data.status is string && data.status in ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidComplaint(data) {
+      return data.complaintId is string && data.complaintId.size() >= 3 && data.complaintId.size() <= 128 &&
+             data.userId is string && data.userId.size() >= 3 && data.userId.size() <= 128 &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 80 &&
+             data.description is string && data.description.size() >= 3 && data.description.size() <= 1000 &&
+             data.status is string && data.status in ['OPEN', 'INVESTIGATING', 'RESOLVED'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             (!('updatedAt' in data) || (data.updatedAt is timestamp && data.updatedAt <= request.time));
+    }
+
+    function isValidEmergencyAlert(data) {
+      return data.alertId is string && data.alertId.size() >= 3 && data.alertId.size() <= 128 &&
+             data.rideId is string && data.rideId.size() >= 1 && data.rideId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.passengerName is string && data.passengerName.size() >= 1 && data.passengerName.size() <= 100 &&
+             data.status is string && data.status in ['ACTIVE_EMERGENCY', 'RESOLVED'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidNotificationEvent(data) {
+      return data.senderUid is string && data.senderUid == request.auth.uid &&
+             data.recipientUid is string && data.recipientUid.size() >= 1 && data.recipientUid.size() <= 128 &&
+             data.type is string && data.type.size() >= 2 && data.type.size() <= 60 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 400 &&
+             (!('rideId' in data) || (data.rideId is string && data.rideId.size() <= 128)) &&
+             (!('targetTab' in data) || (data.targetTab is int && data.targetTab >= 0 && data.targetTab <= 3)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // Zero-Trust Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 3. ADMINISTRATIVE COLLECTIONS (OWNER IDENTITY LOCK: MAHI ONLY)
+    // =========================================================================
+
+    match /admins/{adminId} {
+      allow read: if isMahiOwner();
+      allow create, update: if isMahiOwner() && isValidId(adminId) &&
+        (adminId == 'ADMIN-MAHI' || request.auth.uid == adminId) &&
+        isValidAdminDoc(incoming());
+      allow delete: if isMahiOwner();
+    }
+
+    match /config/{docId} {
+      // Fare rules readable by app clients; security credential hashes strictly restricted to MAHI Owner
+      allow read: if docId == 'fares' || isMahiOwner();
+      allow create, update, delete: if isMahiOwner();
+    }
+
+    // Tamper-Proof Security Audit Logs (Append-Only)
+    match /security_audit_logs/{logId} {
+      allow read: if isMahiOwner();
+      allow create: if isSignedIn() && isValidId(logId) && isValidSecurityAuditLog(incoming());
+      allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // 4. USER PROFILES, SAVED PLACES & FCM TOKENS (/users/{userId})
+    // =========================================================================
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isMahiOwner());
+
+      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        (incoming().role in ['PASSENGER', 'DRIVER'] || isMahiOwner());
+
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId &&
+         isValidUserProfile(incoming()) &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid', 'createdAt']) &&
+         incoming().createdAt == existing().createdAt) ||
+        (isMahiOwner() && isValidUserProfile(incoming()))
+      );
+
+      allow delete: if isMahiOwner();
+
+      match /saved_places/{placeId} {
+        allow read: if isSignedIn() && (request.auth.uid == userId || isMahiOwner());
+        allow create: if isSignedIn() && isValidId(placeId) &&
+          (request.auth.uid == userId || isMahiOwner()) && isValidSavedPlace(incoming());
+        allow update: if isSignedIn() &&
+          (request.auth.uid == userId || isMahiOwner()) &&
+          isValidSavedPlace(incoming()) &&
+          incoming().createdAt == existing().createdAt;
+        allow delete: if isSignedIn() && (request.auth.uid == userId || isMahiOwner());
+      }
+
+      match /fcmTokens/{token} {
+        allow read, delete: if isSignedIn() && (request.auth.uid == userId || isMahiOwner());
+        allow create, update: if isSignedIn() && request.auth.uid == userId &&
+          isValidFcmToken(incoming(), token);
+      }
+    }
+
+    // =========================================================================
+    // 5. DRIVER / CAPTAIN DOCUMENT PATHS (/drivers/{driverId})
+    // =========================================================================
+
+    match /drivers/{driverId} {
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn() && isValidId(driverId) &&
+        request.auth.uid == driverId &&
+        incoming().driverId == request.auth.uid &&
+        incoming().isApproved == false &&
+        isValidDriver(incoming());
+
+      allow update: if isSignedIn() && isValidDriver(incoming()) && (
+        (request.auth.uid == driverId &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+           'driverId', 'isApproved', 'statusBadge', 'rating', 'totalRides', 'earningsPKR', 'createdAt'
+         ]) &&
+         incoming().createdAt == existing().createdAt) ||
+        isMahiOwner()
+      );
+
+      allow delete: if isMahiOwner();
+    }
+
+    // =========================================================================
+    // 6. RIDE BOOKINGS (/rides/{rideId}) & DISPATCH QUEUE (/ride_requests/{requestId})
+    // =========================================================================
+
+    match /rides/{rideId} {
+      allow read: if isSignedIn() && (
+        existing().passengerId == request.auth.uid ||
+        existing().driverId == request.auth.uid ||
+        (existing().status == 'SEARCHING' && isApprovedDriver()) ||
+        isMahiOwner()
+      );
+
+      allow create: if isSignedIn() && isValidId(rideId) &&
+        incoming().passengerId == request.auth.uid &&
+        incoming().status == 'SEARCHING' &&
+        !('driverId' in incoming()) &&
+        isValidRide(incoming());
+
+      allow update: if isSignedIn() && isValidRide(incoming()) &&
+        incoming().createdAt == existing().createdAt && (
+        // Action 1: Approved driver atomically claims unassigned SEARCHING ride
+        (existing().status == 'SEARCHING' &&
+         isApprovedDriver() &&
+         incoming().driverId == request.auth.uid &&
+         incoming().status == 'ACCEPTED' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'driverId', 'driverName', 'driverPhone', 'vehiclePlate', 'updatedAt'])) ||
+
+        // Action 2: Assigned driver advances trip lifecycle & updates live GPS
+        (existing().driverId == request.auth.uid &&
+         existing().status in ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] &&
+         incoming().status in ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'] &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'driverLat', 'driverLng', 'paymentMethod', 'paymentStatus', 'completedAt', 'updatedAt'])) ||
+
+        // Action 3a: Passenger cancels prior to trip start
+        (existing().passengerId == request.auth.uid &&
+         existing().status in ['SEARCHING', 'ACCEPTED'] &&
+         incoming().status == 'CANCELLED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+
+        // Action 3b: Passenger rates completed trip
+        (existing().passengerId == request.auth.uid &&
+         existing().status == 'COMPLETED' &&
+         incoming().status == 'COMPLETED' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['rating', 'driverRating', 'ratingGiven', 'review', 'reviewGiven', 'ratingTags', 'ratedAt', 'ratingStatus'])) ||
+
+        // Action 4: MAHI Owner Admin override
+        isMahiOwner()
+      );
+
+      allow delete: if isMahiOwner();
+    }
+
+    match /ride_requests/{requestId} {
+      allow read: if isSignedIn() && (
+        existing().passengerId == request.auth.uid ||
+        existing().driverId == request.auth.uid ||
+        (existing().status == 'SEARCHING' && isApprovedDriver()) ||
+        isMahiOwner()
+      );
+
+      allow create: if isSignedIn() && isValidId(requestId) &&
+        incoming().passengerId == request.auth.uid &&
+        incoming().status == 'SEARCHING' &&
+        !('driverId' in incoming()) &&
+        isValidRideRequest(incoming());
+
+      allow update: if isSignedIn() && isValidRideRequest(incoming()) &&
+        incoming().createdAt == existing().createdAt && (
+        // Action 1: Approved driver atomically claims unassigned SEARCHING ride request
+        (existing().status == 'SEARCHING' &&
+         isApprovedDriver() &&
+         incoming().driverId == request.auth.uid &&
+         incoming().status == 'ACCEPTED' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'driverId', 'driverName', 'driverPhone', 'vehiclePlate', 'updatedAt'])) ||
+
+        // Action 2: Assigned driver advances trip lifecycle & updates live GPS
+        (existing().driverId == request.auth.uid &&
+         existing().status in ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] &&
+         incoming().status in ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED'] &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'driverLat', 'driverLng', 'paymentMethod', 'paymentStatus', 'completedAt', 'updatedAt'])) ||
+
+        // Action 3a: Passenger cancels prior to trip start
+        (existing().passengerId == request.auth.uid &&
+         existing().status in ['SEARCHING', 'ACCEPTED'] &&
+         incoming().status == 'CANCELLED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+
+        // Action 3b: Passenger rates completed trip
+        (existing().passengerId == request.auth.uid &&
+         existing().status == 'COMPLETED' &&
+         incoming().status == 'COMPLETED' &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['rating', 'driverRating', 'ratingGiven', 'review', 'reviewGiven', 'ratingTags', 'ratedAt', 'ratingStatus'])) ||
+
+        // Action 4: MAHI Owner Admin override
+        isMahiOwner()
+      );
+
+      allow delete: if isMahiOwner();
+    }
+
+    match /scheduled_rides/{scheduleId} {
+      allow read: if isSignedIn() && (
+        existing().passengerId == request.auth.uid ||
+        existing().driverId == request.auth.uid ||
+        (existing().status == 'SCHEDULED' && isApprovedDriver()) ||
+        isMahiOwner()
+      );
+
+      allow create: if isSignedIn() && isValidId(scheduleId) &&
+        incoming().passengerId == request.auth.uid &&
+        incoming().status == 'SCHEDULED' &&
+        incoming().scheduleId == scheduleId &&
+        !('driverId' in incoming()) &&
+        isValidScheduledRide(incoming());
+
+      allow update: if isSignedIn() && isValidScheduledRide(incoming()) &&
+        incoming().createdAt == existing().createdAt && (
+        (existing().passengerId == request.auth.uid &&
+         existing().status == 'SCHEDULED' &&
+         incoming().status == 'CANCELLED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        (existing().status == 'SCHEDULED' &&
+         isApprovedDriver() &&
+         incoming().driverId == request.auth.uid &&
+         incoming().status == 'DISPATCHED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'driverId', 'updatedAt'])) ||
+        isMahiOwner()
+      );
+
+      allow delete: if isMahiOwner();
+    }
+
+    // =========================================================================
+    // 7. WEDDING & BARAT CONVOY RESERVATIONS
+    // =========================================================================
+
+    match /wedding_bookings/{bookingId} {
+      allow read: if isSignedIn() && (existing().userId == request.auth.uid || isMahiOwner());
+      allow create: if isSignedIn() && isValidId(bookingId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status in ['PENDING', 'CONFIRMED'] &&
+        isValidWeddingBooking(incoming());
+      allow update: if isSignedIn() && isValidWeddingBooking(incoming()) &&
+        incoming().createdAt == existing().createdAt && (
+        (existing().userId == request.auth.uid &&
+         existing().status in ['PENDING', 'CONFIRMED'] &&
+         incoming().status == 'CANCELLED' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+        isMahiOwner()
+      );
+      allow delete: if isMahiOwner();
+    }
+
+    // =========================================================================
+    // 8. COMPLAINTS, EMERGENCY ALERTS & FCM NOTIFICATION EVENTS
+    // =========================================================================
+
+    match /complaints/{complaintId} {
+      allow read: if isSignedIn() && (existing().userId == request.auth.uid || isMahiOwner());
+      allow create: if isSignedIn() && isValidId(complaintId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'OPEN' &&
+        isValidComplaint(incoming());
+      allow update: if isMahiOwner() && isValidComplaint(incoming());
+      allow delete: if isMahiOwner();
+    }
+
+    match /emergency_alerts/{alertId} {
+      allow read: if isSignedIn() && (existing().userId == request.auth.uid || isMahiOwner());
+      allow create: if isSignedIn() && isValidId(alertId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'ACTIVE_EMERGENCY' &&
+        isValidEmergencyAlert(incoming());
+      allow update, delete: if isMahiOwner();
+    }
+
+    match /notification_events/{eventId} {
+      allow read: if isSignedIn() && (
+        existing().recipientUid == request.auth.uid ||
+        existing().senderUid == request.auth.uid ||
+        isMahiOwner()
+      );
+      allow create: if isSignedIn() && isValidId(eventId) &&
+        incoming().senderUid == request.auth.uid &&
+        isValidNotificationEvent(incoming());
+      allow update, delete: if isMahiOwner();
+    }
+  }
+}

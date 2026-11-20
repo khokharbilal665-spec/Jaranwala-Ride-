@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Jaranwala Ride</string>
+    <string name="slogan">Your City, Your Ride</string>
+    <string name="slogan_urdu">آپ کا شہر، آپ کی سواری</string>
+    <string name="created_by">Created by Bilal Khokhar (MAHI)</string>
+    <string name="created_by_urdu">پیشکش: بلال کھوکھر (ماہی)</string>
+</resources>

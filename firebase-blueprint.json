@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "Registered passenger or captain accounts in Jaranwala",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "emergencyContact": { "type": "string", "description": "Saved emergency contact phone number" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["PASSENGER", "DRIVER", "ADMIN"] },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp set via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp set via FieldValue.serverTimestamp()" }
+      },
+      "required": ["uid", "name", "role"]
+    },
+    "saved_places": {
+      "title": "SavedPlace",
+      "description": "Quick pickup/dropoff landmarks saved by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "urduLabel": { "type": "string" },
+        "address": { "type": "string" },
+        "iconType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "label", "address", "createdAt"]
+    },
+    "fcm_tokens": {
+      "title": "FcmToken",
+      "description": "Device FCM registration token scoped per authenticated user",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "platform": { "type": "string" },
+        "role": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["token", "platform", "updatedAt"]
+    },
+    "drivers": {
+      "title": "Driver",
+      "description": "Captain credentials, vehicle details, live GPS coordinates, and admin approval status",
+      "type": "object",
+      "properties": {
+        "driverId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "cnic": { "type": "string" },
+        "licenseNumber": { "type": "string" },
+        "vehicleType": { "type": "string", "enum": ["BIKE", "RICKSHAW", "CAR"] },
+        "vehicleModel": { "type": "string" },
+        "plateNumber": { "type": "string" },
+        "isOnline": { "type": "boolean" },
+        "isApproved": { "type": "boolean" },
+        "rating": { "type": "number" },
+        "totalRides": { "type": "integer" },
+        "earningsPKR": { "type": "number" },
+        "currentLat": { "type": "number" },
+        "currentLng": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["driverId", "name", "phone", "vehicleType", "isApproved", "isOnline"]
+    },
+    "rides": {
+      "title": "Ride",
+      "description": "On-demand bike, rickshaw, or car trips in Jaranwala",
+      "type": "object",
+      "properties": {
+        "rideId": { "type": "string" },
+        "passengerId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "passengerPhone": { "type": "string" },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "driverPhone": { "type": "string" },
+        "vehiclePlate": { "type": "string" },
+        "pickup": { "type": "string" },
+        "destination": { "type": "string" },
+        "vehicleType": { "type": "string", "enum": ["BIKE", "RICKSHAW", "CAR"] },
+        "estimatedFarePKR": { "type": "number" },
+        "distanceKm": { "type": "number" },
+        "status": { "type": "string", "enum": ["SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "serviceMode": { "type": "string", "enum": ["RIDE", "PARCEL"] },
+        "isParcelDelivery": { "type": "boolean" },
+        "parcelDescription": { "type": "string" },
+        "parcelWeightKg": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientPhone": { "type": "string" },
+        "codAmountPKR": { "type": "number" },
+        "driverLat": { "type": "number" },
+        "driverLng": { "type": "number" },
+        "rating": { "type": "integer" },
+        "review": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rideId", "passengerId", "pickup", "destination", "vehicleType", "status", "createdAt"]
+    },
+    "ride_requests": {
+      "title": "RideRequest",
+      "description": "Real-time dispatch queue for Jaranwala city with pickup, destination, GPS tracking, and cash fare",
+      "type": "object",
+      "properties": {
+        "passengerId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "passengerPhone": { "type": "string" },
+        "pickupLocation": { "type": "string" },
+        "destinationLocation": { "type": "string" },
+        "rideType": { "type": "string", "enum": ["BIKE", "RICKSHAW", "CAR"] },
+        "vehicleCategoryTitle": { "type": "string" },
+        "estimatedFarePKR": { "type": "number" },
+        "distanceKm": { "type": "number" },
+        "status": { "type": "string", "enum": ["SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "driverId": { "type": "string" },
+        "driverName": { "type": "string" },
+        "driverPhone": { "type": "string" },
+        "vehiclePlate": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "serviceMode": { "type": "string", "enum": ["RIDE", "PARCEL"] },
+        "isParcelDelivery": { "type": "boolean" },
+        "parcelDescription": { "type": "string" },
+        "parcelWeightKg": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "recipientPhone": { "type": "string" },
+        "codAmountPKR": { "type": "number" },
+        "driverLat": { "type": "number" },
+        "driverLng": { "type": "number" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["passengerId", "pickupLocation", "destinationLocation", "rideType", "status", "createdAt"]
+    },
+    "scheduled_rides": {
+      "title": "ScheduledRide",
+      "description": "Future scheduled ride bookings requested by passengers",
+      "type": "object",
+      "properties": {
+        "scheduleId": { "type": "string" },
+        "passengerId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "passengerPhone": { "type": "string" },
+        "pickupLocation": { "type": "string" },
+        "destinationLocation": { "type": "string" },
+        "pickupLat": { "type": "number" },
+        "pickupLng": { "type": "number" },
+        "destLat": { "type": "number" },
+        "destLng": { "type": "number" },
+        "rideType": { "type": "string", "enum": ["BIKE", "RICKSHAW", "CAR"] },
+        "distanceKm": { "type": "number" },
+        "estimatedFarePKR": { "type": "number" },
+        "promoCode": { "type": "string" },
+        "discountPKR": { "type": "number" },
+        "scheduledForMillis": { "type": "integer" },
+        "scheduledDateDisplay": { "type": "string" },
+        "scheduledTimeDisplay": { "type": "string" },
+        "notes": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string", "enum": ["SCHEDULED", "DISPATCHED", "COMPLETED", "CANCELLED"] },
+        "driverId": { "type": "string" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["scheduleId", "passengerId", "pickupLocation", "destinationLocation", "rideType", "scheduledForMillis", "estimatedFarePKR", "status", "createdAt"]
+    },
+    "wedding_bookings": {
+      "title": "WeddingBooking",
+      "description": "Decorated wedding cars and Barat fleet convoy reservations",
+      "type": "object",
+      "properties": {
+        "bookingId": { "type": "string" },
+        "userId": { "type": "string" },
+        "serviceType": { "type": "string", "enum": ["WEDDING_CAR", "BARAT_CONVOY"] },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "primaryCar": { "type": "string" },
+        "carCount": { "type": "integer" },
+        "eventDate": { "type": "string" },
+        "eventTime": { "type": "string" },
+        "pickupLocation": { "type": "string" },
+        "venueLocation": { "type": "string" },
+        "totalCostPKR": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookingId", "userId", "customerName", "eventDate", "status", "createdAt"]
+    },
+    "complaints": {
+      "title": "Complaint",
+      "description": "Passenger issues and resolution tickets",
+      "type": "object",
+      "properties": {
+        "complaintId": { "type": "string" },
+        "rideId": { "type": "string" },
+        "userId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "INVESTIGATING", "RESOLVED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["complaintId", "userId", "category", "description", "status", "createdAt"]
+    },
+    "emergency_alerts": {
+      "title": "EmergencyAlert",
+      "description": "SOS emergency alerts for Jaranwala Police (Rescue 15), Rescue 1122, and Safety Team",
+      "type": "object",
+      "properties": {
+        "alertId": { "type": "string" },
+        "rideId": { "type": "string" },
+        "userId": { "type": "string" },
+        "passengerName": { "type": "string" },
+        "passengerPhone": { "type": "string" },
+        "driverName": { "type": "string" },
+        "vehiclePlate": { "type": "string" },
+        "pickupLocation": { "type": "string" },
+        "destinationLocation": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["rideId", "userId", "passengerName", "status", "createdAt"]
+    },
+    "notification_events": {
+      "title": "NotificationEvent",
+      "description": "Push notification dispatch trigger events routed via FCM",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "recipientUid": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "rideId": { "type": "string" },
+        "targetTab": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderUid", "recipientUid", "type", "title", "body", "createdAt"]
+    },
+    "admins": {
+      "title": "Admin",
+      "description": "Immutable Owner Administrator identity records (MAHI)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN"] },
+        "masterKeyVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "config": {
+      "title": "Config",
+      "description": "Fare rules (fares) and owner security hashes (security)",
+      "type": "object",
+      "properties": {
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["updatedAt"]
+    },
+    "security_audit_logs": {
+      "title": "SecurityAuditLog",
+      "description": "Immutable append-only security logs for unauthorized elevation attempts, biometric events, and auth failures",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "eventType": { "type": "string" },
+        "description": { "type": "string" },
+        "severity": { "type": "string" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "eventType", "description", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/admins" },
+      "description": "Owner Admin identity documents (MAHI only)"
+    },
+    "/config/{docId}": {
+      "schema": { "$ref": "#/entities/config" },
+      "description": "Public fares config and Owner-restricted security credential hashes"
+    },
+    "/security_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/security_audit_logs" },
+      "description": "Append-only security event audit trail"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/users" },
+      "description": "User profiles isolated by UID"
+    },
+    "/users/{userId}/saved_places/{placeId}": {
+      "schema": { "$ref": "#/entities/saved_places" },
+      "description": "Saved places subcollection owned by userId"
+    },
+    "/users/{userId}/fcmTokens/{token}": {
+      "schema": { "$ref": "#/entities/fcm_tokens" },
+      "description": "FCM push registration tokens owned by userId"
+    },
+    "/drivers/{driverId}": {
+      "schema": { "$ref": "#/entities/drivers" },
+      "description": "Captain profiles, live coordinates, and Admin approval flags"
+    },
+    "/rides/{rideId}": {
+      "schema": { "$ref": "#/entities/rides" },
+      "description": "Primary ride ledger for trips and ratings"
+    },
+    "/ride_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/ride_requests" },
+      "description": "Real-time dispatch queue for open SEARCHING and active rides"
+    },
+    "/scheduled_rides/{scheduleId}": {
+      "schema": { "$ref": "#/entities/scheduled_rides" },
+      "description": "Future scheduled ride bookings stored per passenger"
+    },
+    "/wedding_bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/wedding_bookings" },
+      "description": "Wedding car and Barat convoy reservations"
+    },
+    "/complaints/{complaintId}": {
+      "schema": { "$ref": "#/entities/complaints" },
+      "description": "Passenger support complaints"
+    },
+    "/emergency_alerts/{alertId}": {
+      "schema": { "$ref": "#/entities/emergency_alerts" },
+      "description": "Emergency SOS alerts"
+    },
+    "/notification_events/{eventId}": {
+      "schema": { "$ref": "#/entities/notification_events" },
+      "description": "Push notification events"
+    }
+  }
+}

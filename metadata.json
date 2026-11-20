@@ -1,0 +1,6 @@
+{
+  "name": "Jaranwala Ride",
+  "description": "Your City, Your Ride. Complete ride-hailing & wedding convoy booking service in Jaranwala, Punjab, Pakistan created by Bilal Khokhar (MAHI).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
